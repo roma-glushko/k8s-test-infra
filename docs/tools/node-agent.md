@@ -12,10 +12,17 @@ function of that flag plus the profile.
 
 ## Reconcile contract
 
-`--config` and `--topology` are polled every 5s rather than watched, because a
-ConfigMap update swaps the atomic `..data` symlink and a watch on the file
-itself would pin the replaced inode. The agent emits the current state once on
-startup and then only when the bytes of either document change.
+`--config` and `--topology` are watched with filesystem events. The watch is on
+the directory holding each document rather than the document itself: a ConfigMap
+update and an editor's save both replace the file's inode — the kubelet by
+renaming the atomic `..data` symlink — so a watch on the file would hold the one
+just replaced. A path reached through a symlink is watched at both ends, so an
+edit to `/opt/profiles/a100.yaml` behind `/etc/mokka/config.yaml` arrives too.
+
+`--resync-interval` re-reads both documents regardless of events, for a node
+whose kernel reports none: a profile on NFS, or a host at its inotify watch
+limit. The agent emits the current state once on startup and then only when the
+bytes of either document change.
 
 Each state change runs one reconcile:
 
@@ -67,6 +74,7 @@ variable; the flag wins when both are set.
 | `--host-root` | `MOKKA_AGENT_HOST_ROOT` | `/host` | where the host filesystem is mounted in the agent's namespace |
 | `--health-addr` | `MOKKA_AGENT_HEALTH_ADDR` | `:9090` | address for `/healthz` and `/readyz` |
 | `--shutdown-timeout` | `MOKKA_AGENT_SHUTDOWN_TIMEOUT` | `30s` | maximum time to wait for simulators to revoke and discard on SIGINT/SIGTERM |
+| `--resync-interval` | `MOKKA_AGENT_RESYNC_INTERVAL` | `5m` | re-read `--config` and `--topology` this often regardless of filesystem events; `0` relies on events alone |
 | `--log-level` | `MOKKA_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error`. `warning` is accepted as an alias of `warn`, and an empty value falls back to `info` |
 | `--log-format` | `MOKKA_LOG_FORMAT` | `json` | `json` or `plain`. An empty value falls back to `json` |
 | `--ib-mode` | `MOCK_IB` | `off` | InfiniBand simulation tier: `off`, `sysfs` (render only) or `full` (adds the mock-ib daemon). An empty value reads as `off` |
@@ -108,12 +116,15 @@ The chart renders this command line into the nvml-mock DaemonSet, dropping
   --health-addr=:9091 \
   --log-level=info \
   --log-format=json \
-  --shutdown-timeout=5s
+  --shutdown-timeout=5s \
+  --resync-interval=1m
 ```
 
 The rendered `--shutdown-timeout` is `nodeAgent.shutdownTimeout`, 5s by
 default, not the 30s the binary compiles in: a default chart install gives
 teardown 5s. The 30s in the table above is what a bare `node-agent start` uses.
+`--resync-interval` diverges the same way: `nodeAgent.resyncInterval` is 1m
+against the binary's 5m.
 
 The InfiniBand and fabricmanager flags are not templated. The chart drives
 those simulators through their environment variables instead (`MOCK_IB`,

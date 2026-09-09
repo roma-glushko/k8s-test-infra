@@ -112,6 +112,12 @@ func startCommand() *cli.Command {
 				Sources: cli.EnvVars("MOKKA_AGENT_SHUTDOWN_TIMEOUT"),
 				Usage:   "maximum time to wait for simulators to revoke and discard on SIGINT/SIGTERM",
 			},
+			&cli.DurationFlag{
+				Name:    "resync-interval",
+				Value:   1 * time.Minute,
+				Sources: cli.EnvVars("MOKKA_AGENT_RESYNC_INTERVAL"),
+				Usage:   "re-read --config and --topology this often regardless of filesystem events; 0 relies on events alone",
+			},
 		},
 		Action: runStart,
 	}
@@ -144,6 +150,7 @@ func runStart(ctx context.Context, cmd *cli.Command) error {
 	defer cancel()
 
 	shutdownTimeout := cmd.Duration("shutdown-timeout")
+	resyncInterval := cmd.Duration("resync-interval")
 
 	healthSrv := health.NewServer(cmd.String("health-addr"), shutdownTimeout)
 
@@ -162,6 +169,7 @@ func runStart(ctx context.Context, cmd *cli.Command) error {
 		zap.String("ib_mode", string(ibMode)),
 		zap.Bool("ib_fabric", cmd.Bool("ib-fabric")),
 		zap.Duration("shutdown_timeout", shutdownTimeout),
+		zap.Duration("resync_interval", resyncInterval),
 	)
 
 	a := agent.New(agent.Config{
@@ -180,7 +188,7 @@ func runStart(ctx context.Context, cmd *cli.Command) error {
 				Fabric:  cmd.Bool("ib-fabric"),
 			}),
 		},
-		Source:          source.NewFileSource(configPath, cmd.String("topology"), log),
+		Source:          source.NewFileSource(configPath, cmd.String("topology"), resyncInterval, log),
 		Host:            h,
 		Log:             log,
 		ShutdownTimeout: shutdownTimeout,

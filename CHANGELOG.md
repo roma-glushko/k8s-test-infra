@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - nvml-mock: `terminationGracePeriodSeconds` defaults to `10` and
   `nodeAgent.shutdownTimeout` to `5s`, so the agent's teardown finishes before
   SIGKILL instead of being cut short.
+- node-agent: the profile and topology documents reload from filesystem events
+  instead of a 5s poll, so an edit applies in milliseconds and an idle node
+  costs nothing. `nodeAgent.resyncInterval` (default `1m`) still re-reads both
+  on a timer, covering a node whose kernel reports no events.
 
 ### Fixed
 - node-agent: the `/run/nvidia/driver` symlink is removed on shutdown only when
